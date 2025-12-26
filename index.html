@@ -63,6 +63,33 @@
             border: none;
             border-radius: 5px;
         }
+        /* YouTube split styling */
+        .split-screen-youtube {
+            display: flex;
+            width: 90%;
+            max-width: 1000px;
+            aspect-ratio: 16 / 9;
+            margin: 20px auto;
+            border: 4px solid #444;
+            overflow: hidden;
+            background: black;
+        }
+        .yt-side { width:50%; height:100%; overflow:hidden; position:relative; }
+        /* iframe を横幅 200% にして左右をトリミングして表示する */
+        .yt-frame iframe {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            /* iframe の inline width/height を上書きして左右半分ずつ表示 */
+            width: 200% !important;
+            height: 100% !important;
+            border: 0 !important;
+            transform-origin: left top;
+        }
+        /* 左側はそのまま（左半分） */
+        .yt-side.left .yt-frame iframe { transform: translateX(0%); }
+        /* 右側は左方向へ 50% 移動（右半分を表示） */
+        .yt-side.right .yt-frame iframe { transform: translateX(-50%); }
     </style>
 </head>
 <body>
@@ -80,7 +107,7 @@
 
     <button class="play-btn" onclick="syncPlay()">同時再生 / 一時停止</button>
 
-    <div class="controls">
+    <!-- <div class="controls">
         <div class="select-box">
             <h3>左側の映像 (動画A)</h3>
             <select id="selectA" onchange="changeVideo('A')">
@@ -94,17 +121,70 @@
                 <option value="">動画を選択してください</option>
             </select>
         </div>
+    </div> -->
+
+    <!-- YouTube 用コントロール（初期は非表示） -->
+    <div id="youtubeControls" class="select-box" style="display:none; margin:20px auto; max-width:1000px;">
+        <h3>リストから選択</h3>
+        <div style="display:flex; gap:10px;">
+            <select id="ytSelectA" style="flex:1; padding:8px;"></select>
+            <select id="ytSelectB" style="flex:1; padding:8px;"></select>
+            <button onclick="loadYouTubeIDs()">読み込み</button>
+        </div>
+        <p style="margin-top:8px; font-size:0.9em; color:#ccc;">リストから左右の動画を選択してください。</p>
+        <!-- リスト表示: 各項目に「左に設定」「右に設定」ボタンを表示 -->
+        <div id="ytList" style="margin-top:12px; text-align:left; max-height:240px; overflow:auto; background:#222; padding:8px; border-radius:6px;"></div>
+    </div>
+
+    <!-- YouTube 分割画面（iframe をトリミングして左右半分だけ表示） -->
+    <div id="youtubeSplit" class="split-screen-youtube" style="display:none;">
+        <div class="yt-side left">
+            <div class="yt-frame" id="ytA"></div>
+        </div>
+        <div class="yt-side right">
+            <div class="yt-frame" id="ytB"></div>
+        </div>
     </div>
 
     <script>
+    // --- 共通 ---
+    // ローカル動画は存在しない前提にするため初期は YouTube を選択状態にする
+    let currentSource = 'youtube'; // 'local' or 'youtube'
         const vA = document.getElementById('videoA');
         const vB = document.getElementById('videoB');
         const selectA = document.getElementById('selectA');
         const selectB = document.getElementById('selectB');
 
-        // 動画ファイルの変更
+        function toggleSource(mode) {
+            currentSource = mode;
+            const youtubeControls = document.getElementById('youtubeControls');
+            const youtubeSplit = document.getElementById('youtubeSplit');
+            const localVideos = document.querySelector('.split-screen');
+            if (mode === 'youtube') {
+                youtubeControls.style.display = '';
+                youtubeSplit.style.display = '';
+                localVideos.style.display = 'none';
+            } else {
+                youtubeControls.style.display = 'none';
+                youtubeSplit.style.display = 'none';
+                localVideos.style.display = '';
+            }
+        }
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // 初期 UI を現在のソースに合わせる
+            toggleSource(currentSource);
+            // Local / YouTube のそれぞれに合わせた初期読み込み
+            // if (currentSource === 'local') populateVideoSelects();
+            if (currentSource === 'youtube') youtubeSelect();
+        });
+
         function changeVideo(side) {
+            // local モードでのみ動画の src を設定する（local が無効化されている場合は何もしない）
+            if (currentSource !== 'local') return;
             if (side === 'A') {
+
                 const url = selectA.value;
                 if (!url) return;
                 vA.src = url;
@@ -113,6 +193,7 @@
                 const url = selectB.value;
                 if (!url) return;
                 vB.src = url;
+
                 vB.load();
             }
         }
