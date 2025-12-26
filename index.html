@@ -101,6 +101,7 @@
             <select id="selectA" onchange="changeVideo('A')">
                 <option value="">動画を選択してください</option>
             </select>
+            <button onclick="loadYouTubeIDs()">読み込み</button>
         </div>
 
         <div class="select-box">
@@ -108,19 +109,12 @@
             <select id="selectB" onchange="changeVideo('B')">
                 <option value="">動画を選択してください</option>
             </select>
+            <button onclick="populateYouTubeSelects()">読み込み</button>
         </div>
     </div>
 
-    <!-- 切り替え: Local / YouTube -->
-    <div style="margin-top:20px;">
-        <!-- ローカル動画は利用不可にしてユーザーが選ばないようにする -->
-        <label><input type="radio" name="source" value="local" disabled onchange="toggleSource('local')"> ローカル動画（利用不可）</label>
-        &nbsp;&nbsp;
-        <label><input type="radio" name="source" value="youtube" checked onchange="toggleSource('youtube')"> YouTube 埋め込み</label>
-    </div>
-
     <!-- YouTube 用コントロール（初期は非表示） -->
-    <div id="youtubeControls" class="select-box" style="display:none; margin:20px auto; max-width:1000px;">
+    <!-- <div id="youtubeControls" class="select-box" style="display:none; margin:20px auto; max-width:1000px;">
         <h3>YouTube 動画（リストから選択）</h3>
         <div style="display:flex; gap:10px;">
             <select id="ytSelectA" style="flex:1; padding:8px;"></select>
@@ -128,7 +122,7 @@
             <button onclick="loadYouTubeIDs()">読み込み</button>
         </div>
         <p style="margin-top:8px; font-size:0.9em; color:#ccc;">事前に用意したリストから左右の動画を選択してください。自動再生はブラウザ制限の影響を受けます。</p>
-    </div>
+    </div> -->
 
     <!-- YouTube 分割画面（iframe をトリミングして左右半分だけ表示） -->
     <div id="youtubeSplit" class="split-screen-youtube" style="display:none;">
@@ -163,31 +157,6 @@
             }
         }
 
-        // --- Local 動画ロジック ---
-        async function populateVideoSelects() {
-            const selA = document.getElementById('selectA');
-            const selB = document.getElementById('selectB');
-            try {
-                const res = await fetch('videos/list.json', { cache: 'no-store' });
-                if (!res.ok) throw new Error('videos/list.json not found');
-                const videos = await res.json();
-
-                function addOptions(sel) {
-                    while (sel.options.length > 1) sel.remove(1);
-                    videos.forEach(v => {
-                        const opt = document.createElement('option');
-                        opt.value = v.path;
-                        opt.textContent = v.name;
-                        sel.appendChild(opt);
-                    });
-                }
-
-                addOptions(selA);
-                addOptions(selB);
-            } catch (err) {
-                console.warn('Could not load videos/list.json:', err.message);
-            }
-        }
 
         document.addEventListener('DOMContentLoaded', () => {
             // 初期 UI を現在のソースに合わせる
@@ -330,14 +299,7 @@
         }
 
         function syncPlay() {
-            if (currentSource === 'local') {
-                // ローカル動画は再生不可にする（ユーザーの要望により）
-                // 再生処理を行わず、ユーザーへ案内する
-                alert('ローカル動画はこのページ上で再生できません。YouTubeモードを使用してください。');
-                return;
-            }
 
-            // YouTube モード
             if (!playerA || !playerB) {
                 alert('YouTube 動画が読み込まれていません。ID を読み込んでください。');
                 return;
