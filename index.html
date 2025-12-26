@@ -113,20 +113,21 @@
 
     <!-- 切り替え: Local / YouTube -->
     <div style="margin-top:20px;">
-        <label><input type="radio" name="source" value="local" checked onchange="toggleSource('local')"> ローカル動画</label>
+        <!-- ローカル動画は利用不可にしてユーザーが選ばないようにする -->
+        <label><input type="radio" name="source" value="local" disabled onchange="toggleSource('local')"> ローカル動画（利用不可）</label>
         &nbsp;&nbsp;
-        <label><input type="radio" name="source" value="youtube" onchange="toggleSource('youtube')"> YouTube 埋め込み</label>
+        <label><input type="radio" name="source" value="youtube" checked onchange="toggleSource('youtube')"> YouTube 埋め込み</label>
     </div>
 
     <!-- YouTube 用コントロール（初期は非表示） -->
     <div id="youtubeControls" class="select-box" style="display:none; margin:20px auto; max-width:1000px;">
-        <h3>YouTube 動画（ID を入力）</h3>
+        <h3>YouTube 動画（リストから選択）</h3>
         <div style="display:flex; gap:10px;">
-            <input id="ytIdA" placeholder="Left video ID (例: dQw4w9WgXcQ)" style="flex:1; padding:8px;">
-            <input id="ytIdB" placeholder="Right video ID" style="flex:1; padding:8px;">
+            <select id="ytSelectA" style="flex:1; padding:8px;"></select>
+            <select id="ytSelectB" style="flex:1; padding:8px;"></select>
             <button onclick="loadYouTubeIDs()">読み込み</button>
         </div>
-        <p style="margin-top:8px; font-size:0.9em; color:#ccc;">注意: 自動再生制限により再生はユーザー操作が必要になる場合があります。両方ミュートで再生すると許可されることが多いです。</p>
+        <p style="margin-top:8px; font-size:0.9em; color:#ccc;">事前に用意したリストから左右の動画を選択してください。自動再生はブラウザ制限の影響を受けます。</p>
     </div>
 
     <!-- YouTube 分割画面（iframe をトリミングして左右半分だけ表示） -->
@@ -140,8 +141,9 @@
     </div>
 
     <script>
-        // --- 共通 ---
-        let currentSource = 'local'; // 'local' or 'youtube'
+    // --- 共通 ---
+    // ローカル動画は存在しない前提にするため初期は YouTube を選択状態にする
+    let currentSource = 'youtube'; // 'local' or 'youtube'
         const vA = document.getElementById('videoA');
         const vB = document.getElementById('videoB');
 
@@ -188,10 +190,15 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            populateVideoSelects();
+            // 初期 UI を現在のソースに合わせる
+            toggleSource(currentSource);
+            // ローカル動画は存在しないので、必要な場合のみ読み込む（通常は読み込まない）
+            if (currentSource === 'local') populateVideoSelects();
         });
 
         function changeVideo(side) {
+            // local モードでのみ動画の src を設定する（local が無効化されている場合は何もしない）
+            if (currentSource !== 'local') return;
             if (side === 'A') {
                 const val = document.getElementById('selectA').value;
                 if (!val) { vA.pause(); vA.removeAttribute('src'); vA.load(); return; }
@@ -248,11 +255,14 @@
             });
         }
 
+        // 選択されたリスト項目から YouTube を読み込んで cue する
         function loadYouTubeIDs() {
-            const idA = document.getElementById('ytIdA').value.trim();
-            const idB = document.getElementById('ytIdB').value.trim();
+            const selA = document.getElementById('ytSelectA');
+            const selB = document.getElementById('ytSelectB');
+            const idA = selA && selA.value ? selA.value.trim() : '';
+            const idB = selB && selB.value ? selB.value.trim() : '';
             if (!idA || !idB) {
-                alert('両方の YouTube ID を入力してください');
+                alert('左右両方の動画をリストから選択してください');
                 return;
             }
             ensureYouTubeApi();
@@ -274,6 +284,34 @@
             waitCreate();
         }
 
+        // youtube_list.json からセレクトを作成する
+        async function populateYouTubeSelects() {
+            const selA = document.getElementById('ytSelectA');
+            const selB = document.getElementById('ytSelectB');
+            if (!selA || !selB) return;
+            try {
+                const res = await fetch('videos/youtube_list.json', { cache: 'no-store' });
+                if (!res.ok) throw new Error('videos/youtube_list.json not found');
+                const list = await res.json();
+                // Clear existing
+                selA.innerHTML = '';
+                selB.innerHTML = '';
+                // Add placeholder
+                const opt0 = document.createElement('option'); opt0.value = ''; opt0.textContent = '動画を選択してください';
+                selA.appendChild(opt0.cloneNode(true));
+                selB.appendChild(opt0.cloneNode(true));
+                list.forEach(item => {
+                    const o = document.createElement('option');
+                    o.value = item.id || item.url || '';
+                    o.textContent = item.name || (item.url || item.id);
+                    selA.appendChild(o.cloneNode(true));
+                    selB.appendChild(o.cloneNode(true));
+                });
+            } catch (err) {
+                console.warn('Could not load videos/youtube_list.json:', err.message);
+            }
+        }
+
         function onPlayerStateChangeA(event) {
             if (!playerB) return;
             if (event.data === YT.PlayerState.PAUSED) {
@@ -293,13 +331,9 @@
 
         function syncPlay() {
             if (currentSource === 'local') {
-                // 既存の local 動画同期
-                if (vA.paused) {
-                    try { vB.currentTime = vA.currentTime; } catch(e){}
-                    vA.play(); vB.play();
-                } else {
-                    vA.pause(); vB.pause();
-                }
+                // ローカル動画は再生不可にする（ユーザーの要望により）
+                // 再生処理を行わず、ユーザーへ案内する
+                alert('ローカル動画はこのページ上で再生できません。YouTubeモードを使用してください。');
                 return;
             }
 
