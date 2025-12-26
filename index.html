@@ -75,8 +75,20 @@
             background: black;
         }
         .yt-side { width:50%; height:100%; overflow:hidden; position:relative; }
-        .yt-frame iframe { position:absolute; top:0; left:0; width:200%; height:100%; border:0; }
+        /* iframe を横幅 200% にして左右をトリミングして表示する */
+        .yt-frame iframe {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            /* iframe の inline width/height を上書きして左右半分ずつ表示 */
+            width: 200% !important;
+            height: 100% !important;
+            border: 0 !important;
+            transform-origin: left top;
+        }
+        /* 左側はそのまま（左半分） */
         .yt-side.left .yt-frame iframe { transform: translateX(0%); }
+        /* 右側は左方向へ 50% 移動（右半分を表示） */
         .yt-side.right .yt-frame iframe { transform: translateX(-50%); }
     </style>
 </head>
@@ -95,7 +107,7 @@
 
     <button class="play-btn" onclick="syncPlay()">同時再生 / 一時停止</button>
 
-    <div class="controls">
+    <!-- <div class="controls">
         <div class="select-box">
             <h3>左側の映像 (動画A)</h3>
             <select id="selectA" onchange="changeVideo('A')">
@@ -109,17 +121,17 @@
                 <option value="">動画を選択してください</option>
             </select>
         </div>
-    </div>
+    </div> -->
 
     <!-- YouTube 用コントロール（初期は非表示） -->
     <div id="youtubeControls" class="select-box" style="display:none; margin:20px auto; max-width:1000px;">
-        <h3>YouTube 動画（リストから選択）</h3>
+        <h3>リストから選択</h3>
         <div style="display:flex; gap:10px;">
             <select id="ytSelectA" style="flex:1; padding:8px;"></select>
             <select id="ytSelectB" style="flex:1; padding:8px;"></select>
             <button onclick="loadYouTubeIDs()">読み込み</button>
         </div>
-        <p style="margin-top:8px; font-size:0.9em; color:#ccc;">事前に用意したリストから左右の動画を選択してください。自動再生はブラウザ制限の影響を受けます。</p>
+        <p style="margin-top:8px; font-size:0.9em; color:#ccc;">リストから左右の動画を選択してください。</p>
         <!-- リスト表示: 各項目に「左に設定」「右に設定」ボタンを表示 -->
         <div id="ytList" style="margin-top:12px; text-align:left; max-height:240px; overflow:auto; background:#222; padding:8px; border-radius:6px;"></div>
     </div>
@@ -162,8 +174,8 @@
             // 初期 UI を現在のソースに合わせる
             toggleSource(currentSource);
             // Local / YouTube のそれぞれに合わせた初期読み込み
-            if (currentSource === 'local') populateVideoSelects();
-            if (currentSource === 'youtube') populateYouTubeSelects();
+            // if (currentSource === 'local') populateVideoSelects();
+            if (currentSource === 'youtube') youtubeSelect();
         });
 
         function changeVideo(side) {
@@ -255,7 +267,7 @@
         }
 
         // youtube_list.json からセレクトを作成する
-        async function populateYouTubeSelects() {
+        async function youtubeSelect() {
             const selA = document.getElementById('ytSelectA');
             const selB = document.getElementById('ytSelectB');
             if (!selA || !selB) return;
