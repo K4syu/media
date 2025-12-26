@@ -101,7 +101,6 @@
             <select id="selectA" onchange="changeVideo('A')">
                 <option value="">動画を選択してください</option>
             </select>
-            <button onclick="loadYouTubeIDs()">読み込み</button>
         </div>
 
         <div class="select-box">
@@ -109,12 +108,11 @@
             <select id="selectB" onchange="changeVideo('B')">
                 <option value="">動画を選択してください</option>
             </select>
-            <button onclick="populateYouTubeSelects()">読み込み</button>
         </div>
     </div>
 
     <!-- YouTube 用コントロール（初期は非表示） -->
-    <!-- <div id="youtubeControls" class="select-box" style="display:none; margin:20px auto; max-width:1000px;">
+    <div id="youtubeControls" class="select-box" style="display:none; margin:20px auto; max-width:1000px;">
         <h3>YouTube 動画（リストから選択）</h3>
         <div style="display:flex; gap:10px;">
             <select id="ytSelectA" style="flex:1; padding:8px;"></select>
@@ -122,7 +120,9 @@
             <button onclick="loadYouTubeIDs()">読み込み</button>
         </div>
         <p style="margin-top:8px; font-size:0.9em; color:#ccc;">事前に用意したリストから左右の動画を選択してください。自動再生はブラウザ制限の影響を受けます。</p>
-    </div> -->
+        <!-- リスト表示: 各項目に「左に設定」「右に設定」ボタンを表示 -->
+        <div id="ytList" style="margin-top:12px; text-align:left; max-height:240px; overflow:auto; background:#222; padding:8px; border-radius:6px;"></div>
+    </div>
 
     <!-- YouTube 分割画面（iframe をトリミングして左右半分だけ表示） -->
     <div id="youtubeSplit" class="split-screen-youtube" style="display:none;">
@@ -161,8 +161,9 @@
         document.addEventListener('DOMContentLoaded', () => {
             // 初期 UI を現在のソースに合わせる
             toggleSource(currentSource);
-            // ローカル動画は存在しないので、必要な場合のみ読み込む（通常は読み込まない）
+            // Local / YouTube のそれぞれに合わせた初期読み込み
             if (currentSource === 'local') populateVideoSelects();
+            if (currentSource === 'youtube') populateYouTubeSelects();
         });
 
         function changeVideo(side) {
@@ -276,8 +277,55 @@
                     selA.appendChild(o.cloneNode(true));
                     selB.appendChild(o.cloneNode(true));
                 });
+                // Also render a clickable list with assign buttons
+                const listContainer = document.getElementById('ytList');
+                if (listContainer) {
+                    listContainer.innerHTML = '';
+                    list.forEach(item => {
+                        const row = document.createElement('div');
+                        row.style.display = 'flex';
+                        row.style.justifyContent = 'space-between';
+                        row.style.alignItems = 'center';
+                        row.style.padding = '6px 8px';
+                        row.style.borderBottom = '1px solid rgba(255,255,255,0.04)';
+                        const title = document.createElement('div');
+                        title.textContent = item.name || item.id || item.url;
+                        title.style.flex = '1';
+                        title.style.paddingRight = '8px';
+                        const btnLeft = document.createElement('button');
+                        btnLeft.textContent = '左に設定';
+                        btnLeft.style.marginRight = '6px';
+                        btnLeft.onclick = () => assignYouTube('A', item.id || item.url || '');
+                        const btnRight = document.createElement('button');
+                        btnRight.textContent = '右に設定';
+                        btnRight.onclick = () => assignYouTube('B', item.id || item.url || '');
+                        const btnWrap = document.createElement('div');
+                        btnWrap.appendChild(btnLeft);
+                        btnWrap.appendChild(btnRight);
+                        row.appendChild(title);
+                        row.appendChild(btnWrap);
+                        listContainer.appendChild(row);
+                    });
+                }
             } catch (err) {
                 console.warn('Could not load videos/youtube_list.json:', err.message);
+            }
+        }
+
+        // ボタンで左右どちらかに割り当てる（select を更新して、可能なら cue する）
+        function assignYouTube(side, id) {
+            if (!id) return;
+            const sel = side === 'A' ? document.getElementById('ytSelectA') : document.getElementById('ytSelectB');
+            if (!sel) return;
+            sel.value = id;
+            // 既に API が読み込まれていてプレーヤーが作られていれば片側だけ cue する
+            try {
+                if (typeof YT !== 'undefined' && (playerA || playerB)) {
+                    if (side === 'A' && playerA && playerA.cueVideoById) playerA.cueVideoById(id);
+                    if (side === 'B' && playerB && playerB.cueVideoById) playerB.cueVideoById(id);
+                }
+            } catch (e) {
+                // ignore
             }
         }
 
