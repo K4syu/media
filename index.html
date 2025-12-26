@@ -63,6 +63,21 @@
             border: none;
             border-radius: 5px;
         }
+        /* YouTube split styling */
+        .split-screen-youtube {
+            display: flex;
+            width: 90%;
+            max-width: 1000px;
+            aspect-ratio: 16 / 9;
+            margin: 20px auto;
+            border: 4px solid #444;
+            overflow: hidden;
+            background: black;
+        }
+        .yt-side { width:50%; height:100%; overflow:hidden; position:relative; }
+        .yt-frame iframe { position:absolute; top:0; left:0; width:200%; height:100%; border:0; }
+        .yt-side.left .yt-frame iframe { transform: translateX(0%); }
+        .yt-side.right .yt-frame iframe { transform: translateX(-50%); }
     </style>
 </head>
 <body>
@@ -85,9 +100,6 @@
             <h3>左側の映像 (動画A)</h3>
             <select id="selectA" onchange="changeVideo('A')">
                 <option value="">動画を選択してください</option>
-                <option value="videos/movie1.mp4">動画 1</option>
-                <option value="videos/movie2.mp4">動画 2</option>
-                <option value="videos/movie3.mp4">動画 3</option>
             </select>
         </div>
 
@@ -95,43 +107,235 @@
             <h3>右側の映像 (動画B)</h3>
             <select id="selectB" onchange="changeVideo('B')">
                 <option value="">動画を選択してください</option>
-                <option value="videos/movie1.mp4">動画 1</option>
-                <option value="videos/movie2.mp4">動画 2</option>
-                <option value="videos/movie3.mp4">動画 3</option>
             </select>
         </div>
     </div>
 
+    <!-- 切り替え: Local / YouTube -->
+    <div style="margin-top:20px;">
+        <label><input type="radio" name="source" value="local" checked onchange="toggleSource('local')"> ローカル動画</label>
+        &nbsp;&nbsp;
+        <label><input type="radio" name="source" value="youtube" onchange="toggleSource('youtube')"> YouTube 埋め込み</label>
+    </div>
+
+    <!-- YouTube 用コントロール（初期は非表示） -->
+    <div id="youtubeControls" class="select-box" style="display:none; margin:20px auto; max-width:1000px;">
+        <h3>YouTube 動画（ID を入力）</h3>
+        <div style="display:flex; gap:10px;">
+            <input id="ytIdA" placeholder="Left video ID (例: dQw4w9WgXcQ)" style="flex:1; padding:8px;">
+            <input id="ytIdB" placeholder="Right video ID" style="flex:1; padding:8px;">
+            <button onclick="loadYouTubeIDs()">読み込み</button>
+        </div>
+        <p style="margin-top:8px; font-size:0.9em; color:#ccc;">注意: 自動再生制限により再生はユーザー操作が必要になる場合があります。両方ミュートで再生すると許可されることが多いです。</p>
+    </div>
+
+    <!-- YouTube 分割画面（iframe をトリミングして左右半分だけ表示） -->
+    <div id="youtubeSplit" class="split-screen-youtube" style="display:none;">
+        <div class="yt-side left">
+            <div class="yt-frame" id="ytA"></div>
+        </div>
+        <div class="yt-side right">
+            <div class="yt-frame" id="ytB"></div>
+        </div>
+    </div>
+
     <script>
+        // --- 共通 ---
+        let currentSource = 'local'; // 'local' or 'youtube'
         const vA = document.getElementById('videoA');
         const vB = document.getElementById('videoB');
 
-        // 動画ファイルの変更
+        function toggleSource(mode) {
+            currentSource = mode;
+            const youtubeControls = document.getElementById('youtubeControls');
+            const youtubeSplit = document.getElementById('youtubeSplit');
+            const localVideos = document.querySelector('.split-screen');
+            if (mode === 'youtube') {
+                youtubeControls.style.display = '';
+                youtubeSplit.style.display = '';
+                localVideos.style.display = 'none';
+            } else {
+                youtubeControls.style.display = 'none';
+                youtubeSplit.style.display = 'none';
+                localVideos.style.display = '';
+            }
+        }
+
+        // --- Local 動画ロジック ---
+        async function populateVideoSelects() {
+            const selA = document.getElementById('selectA');
+            const selB = document.getElementById('selectB');
+            try {
+                const res = await fetch('videos/list.json', { cache: 'no-store' });
+                if (!res.ok) throw new Error('videos/list.json not found');
+                const videos = await res.json();
+
+                function addOptions(sel) {
+                    while (sel.options.length > 1) sel.remove(1);
+                    videos.forEach(v => {
+                        const opt = document.createElement('option');
+                        opt.value = v.path;
+                        opt.textContent = v.name;
+                        sel.appendChild(opt);
+                    });
+                }
+
+                addOptions(selA);
+                addOptions(selB);
+            } catch (err) {
+                console.warn('Could not load videos/list.json:', err.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            populateVideoSelects();
+        });
+
         function changeVideo(side) {
             if (side === 'A') {
-                vA.src = document.getElementById('selectA').value;
+                const val = document.getElementById('selectA').value;
+                if (!val) { vA.pause(); vA.removeAttribute('src'); vA.load(); return; }
+                vA.src = val;
                 vA.load();
             } else {
-                vB.src = document.getElementById('selectB').value;
+                const val = document.getElementById('selectB').value;
+                if (!val) { vB.pause(); vB.removeAttribute('src'); vB.load(); return; }
+                vB.src = val;
                 vB.load();
             }
         }
 
-        // 同時再生・一時停止の制御
-        function syncPlay() {
-            if (vA.paused) {
-                // 再生位置を合わせてから再生
-                vB.currentTime = vA.currentTime;
-                vA.play();
-                vB.play();
-            } else {
-                vA.pause();
-                vB.pause();
+        vA.onseeked = () => { try { vB.currentTime = vA.currentTime; } catch (e) {} };
+        vB.onseeked = () => { try { vA.currentTime = vB.currentTime; } catch (e) {} };
+
+        // --- YouTube 埋め込みロジック ---
+        // プレーヤー参照
+        let playerA = null, playerB = null;
+        let ytSyncInterval = null;
+        const SYNC_THRESHOLD = 0.3; // 秒
+
+        // YouTube IFrame API を遅延ロード
+        let ytApiLoaded = false;
+        function ensureYouTubeApi() {
+            if (ytApiLoaded) return;
+            const tag = document.createElement('script');
+            tag.src = 'https://www.youtube.com/iframe_api';
+            document.head.appendChild(tag);
+            ytApiLoaded = true;
+        }
+
+        // API ready callback (global)
+        window.onYouTubeIframeAPIReady = function() {
+            // noop: プレーヤーは loadYouTubeIDs 側で作る
+        };
+
+        function createPlayersIfNeeded() {
+            if (playerA && playerB) return;
+            // player containers: 'ytA', 'ytB'
+            playerA = new YT.Player('ytA', {
+                height: '100%', width: '100%', videoId: '',
+                playerVars: { rel:0, modestbranding:1 },
+                events: {
+                    onStateChange: onPlayerStateChangeA
+                }
+            });
+            playerB = new YT.Player('ytB', {
+                height: '100%', width: '100%', videoId: '',
+                playerVars: { rel:0, modestbranding:1 },
+                events: {
+                    onStateChange: onPlayerStateChangeB
+                }
+            });
+        }
+
+        function loadYouTubeIDs() {
+            const idA = document.getElementById('ytIdA').value.trim();
+            const idB = document.getElementById('ytIdB').value.trim();
+            if (!idA || !idB) {
+                alert('両方の YouTube ID を入力してください');
+                return;
+            }
+            ensureYouTubeApi();
+            // API 読み込み後にプレーヤー作成 -> 動画を cue
+            const waitCreate = () => {
+                try {
+                    if (typeof YT === 'undefined' || typeof YT.Player === 'undefined') {
+                        setTimeout(waitCreate, 200);
+                        return;
+                    }
+                    createPlayersIfNeeded();
+                    // cueVideoById でロードして一旦停止（自動再生しない）
+                    try { playerA.cueVideoById(idA); } catch(e){}
+                    try { playerB.cueVideoById(idB); } catch(e){}
+                } catch (e) {
+                    console.error('Error creating players:', e);
+                }
+            };
+            waitCreate();
+        }
+
+        function onPlayerStateChangeA(event) {
+            if (!playerB) return;
+            if (event.data === YT.PlayerState.PAUSED) {
+                try { playerB.pauseVideo(); } catch(e){}
+            } else if (event.data === YT.PlayerState.PLAYING) {
+                try { playerB.playVideo(); } catch(e){}
+            }
+        }
+        function onPlayerStateChangeB(event) {
+            if (!playerA) return;
+            if (event.data === YT.PlayerState.PAUSED) {
+                try { playerA.pauseVideo(); } catch(e){}
+            } else if (event.data === YT.PlayerState.PLAYING) {
+                try { playerA.playVideo(); } catch(e){}
             }
         }
 
-        // 片方をシーク（スライド）した時にもう片方も合わせる
-        vA.onseeked = () => { vB.currentTime = vA.currentTime; };
+        function syncPlay() {
+            if (currentSource === 'local') {
+                // 既存の local 動画同期
+                if (vA.paused) {
+                    try { vB.currentTime = vA.currentTime; } catch(e){}
+                    vA.play(); vB.play();
+                } else {
+                    vA.pause(); vB.pause();
+                }
+                return;
+            }
+
+            // YouTube モード
+            if (!playerA || !playerB) {
+                alert('YouTube 動画が読み込まれていません。ID を読み込んでください。');
+                return;
+            }
+            try {
+                const stateA = playerA.getPlayerState();
+                if (stateA !== YT.PlayerState.PLAYING) {
+                    // 位置を合わせてから再生
+                    const t = playerA.getCurrentTime ? playerA.getCurrentTime() : 0;
+                    try { playerB.seekTo(t, true); } catch(e){}
+                    // 両方再生
+                    playerA.playVideo(); playerB.playVideo();
+
+                    if (ytSyncInterval) clearInterval(ytSyncInterval);
+                    ytSyncInterval = setInterval(() => {
+                        try {
+                            const ta = playerA.getCurrentTime();
+                            const tb = playerB.getCurrentTime();
+                            const diff = Math.abs(ta - tb);
+                            if (diff > SYNC_THRESHOLD) {
+                                playerB.seekTo(ta, true);
+                            }
+                        } catch(e) {}
+                    }, 500);
+                } else {
+                    playerA.pauseVideo(); playerB.pauseVideo();
+                    if (ytSyncInterval) { clearInterval(ytSyncInterval); ytSyncInterval = null; }
+                }
+            } catch (e) {
+                console.error('syncPlay error:', e);
+            }
+        }
     </script>
 
 </body>
